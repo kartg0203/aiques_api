@@ -33,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('history', [HistoryRecordController::class, 'historyRecord']);
     });
 });
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
+
+Route::get('notVerify', function () {
+    return response()->json(['status' => false, 'error' => ['code' => 401, 'message' => '未通過驗證']], 401);
+})->name('notVerify');
