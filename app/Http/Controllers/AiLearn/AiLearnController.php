@@ -47,6 +47,7 @@ class AiLearnController extends Controller
                                 $greeting['greet'][] = $value;
                             }
                         };
+                        $greeting = $this->setTime($greeting, $record->created_ques);
                         // 選擇語言
                         $languageOptions = json_decode($record->language_option, true);
                         $subjectCH = ['英文題目', '日文題目'];
@@ -55,11 +56,7 @@ class AiLearnController extends Controller
                             $subject[$value] = $subjectCH[$value];
                         };
                         $nextContent = '';
-                        // $greeting['greet']['next'] = [
-                        //     'type' => $nextOptions['type'],
-                        //     'lang' => $subject,
-                        //     'content' => $nextContent,
-                        // ];
+
                         $nextOptions = [
                             'position' => $languageOptions['type'] == 'skip' ? 'skip' : 'left',
                             'nextOptions' => [
@@ -132,18 +129,24 @@ class AiLearnController extends Controller
                         ];
 
                         // 製作選項
+                        // foreach (json_decode($ques->options, true) as $key => $value) {
+                        //     $learnContent["question_{$index}_{$key}"] = [
+                        //         'position' => 'left',
+                        //         'question' => [
+                        //             "${key}" => [
+                        //                 'type' => 'word',
+                        //                 'content' => "({$key}) {$value}",
+                        //             ]
+                        //         ]
+                        //     ];
+                        // };
                         foreach (json_decode($ques->options, true) as $key => $value) {
-                            $learnContent["question_{$index}_{$key}"] = [
-                                'position' => 'left',
-                                'question' => [
-                                    "${key}" => [
-                                        'type' => 'word',
-                                        'content' => "({$key}) {$value}",
-                                    ]
-                                ]
+                            $learnContent["question_{$index}_0"]['question'][$key] = [
+                                'type' => 'word',
+                                'content' => "({$key}) {$value}",
                             ];
                         };
-
+                        $learnContent["question_{$index}_0"] = $this->setTime($learnContent["question_{$index}_0"], $record->created_ques);
                         // 使用者的選項
                         $quesOptions = json_decode($ques->options, true);
                         $type = 'question';
@@ -199,6 +202,7 @@ class AiLearnController extends Controller
                                     ]
                                 ],
                             ];
+                            $learnContent["question_{$index}_1"] = $this->setTime($learnContent["question_{$index}_1"], $record->created_answer);
                             $learnContent["nextOptions_{$index}"] = [
                                 'position' => $nextPosition,
                                 'nextOptions' => [
@@ -223,6 +227,7 @@ class AiLearnController extends Controller
                                 $ending['end'][] = $value;
                             }
                         };
+                        $ending = $this->setTime($ending, $record->created_answer);
                         $type = 'end';
                     }
                     // 暫存上一題選項
@@ -328,6 +333,7 @@ class AiLearnController extends Controller
             'greeting' => $greetJson,
             'language_option' => $langOption
         ]);
+        $greeting = $this->setTime($greeting, $now);
         if ($record) {
             return response()->json(['status' => true, 'greeting' => $greeting, 'nextOptions' => $next], JSON_UNESCAPED_UNICODE);
         } else {
@@ -467,24 +473,9 @@ class AiLearnController extends Controller
                     'content' => "({$key}) {$value}",
                 ];
             };
-        } elseif ($state == 'end') {
-            // // 沒題目
-            // $getEnd = $this->getEnd();
-            // $endingAll = [];
-            // foreach ($getEnd as $end) {
-            //     $endingAll[] = [
-            //         'sort' => $end['sort'],
-            //         'script' => json_decode($end['script'], true),
-            //     ];
-            // };
-            // $endJson = json_encode($endingAll, JSON_UNESCAPED_UNICODE);
-            // $record->update(['ending' => $endJson]);
-            // $ending['end'] = $endingAll;
-            // $ending['eTime'] = $record->created_answer;
-            // $$question['question'] = [];
-            // $state = 'end';
         }
 
+        $question = $this->setTime($question, $record->created_ques);
         return response()->json(
             [
                 'state' => $state,
@@ -697,6 +688,7 @@ class AiLearnController extends Controller
                 ]
             ],
         ];
+        $question = $this->setTime($question, $record->created_answer);
         $next = [
             'position' => $nextPosition,
             'nextOptions' => [
@@ -711,6 +703,7 @@ class AiLearnController extends Controller
         if ($nextType == 'end') {
             // 沒題目
             $ending = $this->getEnd($record);
+            $ending = $this->setTime($ending, $record->created_answer);
             $state = 'end';
         }
         return response()->json([
@@ -721,7 +714,6 @@ class AiLearnController extends Controller
             'question' => $question,
             'nextOptions' => $next,
             'ending' => $ending,
-            'aTime' => $now,
         ], JSON_UNESCAPED_UNICODE);
     }
 
@@ -794,6 +786,19 @@ class AiLearnController extends Controller
             }
         };
         return $ending;
+    }
+
+    /**
+     * 在對話的最後一個設時間
+     */
+    public function setTime($content, $time)
+    {
+        $key = array_key_last($content);
+        $lastKey = array_key_last($content[$key]);
+        $lastItem = $content[$key][$lastKey];
+        $lastItem['time'] = $time;
+        $content[$key][$lastKey] = $lastItem;
+        return $content;
     }
 
 
