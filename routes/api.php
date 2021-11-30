@@ -16,9 +16,6 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('test', function () {
-    return response()->json(['success' => true, 'message' => '你成功了']);
-});
 
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -35,5 +32,5 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::get('notVerify', function () {
-    return response()->json(['status' => false, 'error' => ['code' => 401, 'message' => '未通過驗證']], 401);
+    return response()->json(['status' => false, 'error' => ['code' => 401, 'message' => 'unauthenticated']], 401,);
 })->name('notVerify');
