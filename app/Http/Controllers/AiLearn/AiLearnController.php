@@ -291,12 +291,12 @@ class AiLearnController extends Controller
                 $chkWeakItem = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkWeakItem']])->inRandomOrder()->limit(1);
 
                 $categoryCH = DB::connection('xiwei')->table('cs_qtype')->where('status', 1)->pluck('sName', 'sCode');
-                $quesWrong->each(function($wrong){
-                    
+                $quesWrong->each(function ($wrong) use ($categoryCH) {
+                    $wrong->categoryCH = $categoryCH[$wrong->category];
                 });
             }
         }
-
+        // dd("end");
         // 在查剩下的
         $greetUnion = CsGreeting::where([['disabled', 0], ['position', 'start']])
             ->where('sort', '2')
@@ -313,6 +313,7 @@ class AiLearnController extends Controller
                 $query->union($chkWeakItem);
             })
             ->get();
+
         $sortGreeting = $greetUnion->sortBy('sort');
         $greeting['position'] = 'left';
         foreach ($sortGreeting as $greet) {
@@ -326,7 +327,7 @@ class AiLearnController extends Controller
                             $value['content'] = str_replace('N', $diffInDay, $value['content']);
                             break;
                         case 'chkWeakItem':
-                            $value['content'] = '';
+                            $value['content'] = str_replace('W', '', $value['content']);
                             break;
                     }
                 }
