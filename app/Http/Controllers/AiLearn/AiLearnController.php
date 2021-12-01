@@ -8,8 +8,10 @@ use App\Models\User;
 use App\Models\CsAiQuesBank;
 use App\Models\CsAiQuesRecord;
 use App\Models\CsGreeting;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-
+use PhpParser\Node\Stmt\Break_;
 
 class AiLearnController extends Controller
 {
@@ -263,7 +265,38 @@ class AiLearnController extends Controller
         $user = $request->user();
 
         // 先查隨機問候語
-        $greet = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '1']])->inRandomOrder()->limit(1);
+        $greet = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '1'], ['chkCond', 'chkGreet']])->inRandomOrder()->limit(1);
+
+        // 弱項題型及未上線練習擇一，未上線練習優先
+        $latestClassDate = $user->csAiQuesRecords()->latest('created_ques')->value('created_ques');
+        $chkLearnDate = null;
+        $diffInDay = '';
+        if ($latestClassDate) {
+            $latestClassDate = Carbon::parse(mb_substr($latestClassDate, 0, 10, 'UTF-8'));
+            $aWeekAgo = today()->subWeek();
+            // $latestClassDate = today()->modify('-30 days');
+            if ($latestClassDate->lte($aWeekAgo)) {
+                $chkLearnDate = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkLearnDate']])->inRandomOrder()->limit(1);
+                $diffInDay = $latestClassDate->diffInDays(today());
+            }
+        }
+        // 假如練習時間為空可以來判斷題型
+        $chkWeakItem = null;
+        if (empty($diffInDay) && empty($chkLearnDate)) {
+            $aMonthAgo = today()->subMonths();
+            // 要抓做過的題型裡答錯3題以上>=的
+            $quesWrong = $user->csAiQuesRecords()->join('cs_aiquesbank', 'Qid', 'cs_aiquesbank.id')
+                ->selectRaw("category, COUNT(category) as countCategory, COUNT(is_right = false OR null) as countWrong, round((COUNT(is_right = true OR null)/COUNT(category)) * 100) as hitRate")->where('cs_aiquesbank.lang', 0)->whereDate('created_answer', '>', $aMonthAgo)->groupBy('category')->having('countWrong', '>=', '3')->get();
+            if ($quesWrong->isNotEmpty()) {
+                $chkWeakItem = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkWeakItem']])->inRandomOrder()->limit(1);
+
+                $categoryCH = DB::connection('xiwei')->table('cs_qtype')->where('status', 1)->pluck('sName', 'sCode');
+                $quesWrong->each(function($wrong){
+                    
+                });
+            }
+        }
+
         // 在查剩下的
         $greetUnion = CsGreeting::where([['disabled', 0], ['position', 'start']])
             ->where('sort', '2')
@@ -274,17 +307,37 @@ class AiLearnController extends Controller
             })->when($system, function ($query) {
                 return $query->orWhere('sort', '5');
             })->union($greet)
+            ->when($chkLearnDate, function ($query) use ($chkLearnDate) {
+                $query->union($chkLearnDate);
+            })->when($chkWeakItem, function ($query) use ($chkWeakItem) {
+                $query->union($chkWeakItem);
+            })
             ->get();
-
         $sortGreeting = $greetUnion->sortBy('sort');
-
         $greeting['position'] = 'left';
         foreach ($sortGreeting as $greet) {
+            $script = json_decode($greet['script'], true);
+            if ($greet['sort'] == '1') {
+                foreach ($script as &$value) {
+                    switch ($greet['chkCond']) {
+                        case 'chkGreet':
+                            break;
+                        case 'chkLearnDate':
+                            $value['content'] = str_replace('N', $diffInDay, $value['content']);
+                            break;
+                        case 'chkWeakItem':
+                            $value['content'] = '';
+                            break;
+                    }
+                }
+            }
+            dump($script);
             $greetingAll[] = [
                 'sort' => $greet['sort'],
-                'script' =>  json_decode($greet['script'], true),
+                'script' =>  $script,
             ];
         };
+        dd($greetingAll);
         $greetJson = json_encode($greetingAll, JSON_UNESCAPED_UNICODE);
         // 給前端的
         foreach ($sortGreeting as $greet) {
