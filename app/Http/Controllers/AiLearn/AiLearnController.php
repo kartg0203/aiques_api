@@ -9,6 +9,7 @@ use App\Models\CsAiQuesBank;
 use App\Models\CsAiQuesRecord;
 use App\Models\CsGreeting;
 use Carbon\Carbon;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpParser\Node\Stmt\Break_;
@@ -282,17 +283,21 @@ class AiLearnController extends Controller
         }
         // 假如練習時間為空可以來判斷題型
         $chkWeakItem = null;
+        $weaknessCategory = [];
         if (empty($diffInDay) && empty($chkLearnDate)) {
             $aMonthAgo = today()->subMonths();
             // 要抓做過的題型裡答錯3題以上>=的
+            // $quesWrong = $user->csAiQuesRecords()->join('cs_aiquesbank', 'Qid', 'cs_aiquesbank.id')
+            //     ->selectRaw("category, COUNT(category) as countCategory, COUNT(is_right = false OR null) as countWrong, round((COUNT(is_right = true OR null)/COUNT(category)) * 100) as hitRate")->where('cs_aiquesbank.lang', 0)->whereDate('created_answer', '>', $aMonthAgo)->groupBy('category')->having('countWrong', '>=', '3')->get();
             $quesWrong = $user->csAiQuesRecords()->join('cs_aiquesbank', 'Qid', 'cs_aiquesbank.id')
-                ->selectRaw("category, COUNT(category) as countCategory, COUNT(is_right = false OR null) as countWrong, round((COUNT(is_right = true OR null)/COUNT(category)) * 100) as hitRate")->where('cs_aiquesbank.lang', 0)->whereDate('created_answer', '>', $aMonthAgo)->groupBy('category')->having('countWrong', '>=', '3')->get();
+                ->selectRaw("category, COUNT(is_right = false OR null) as countWrong")->where('cs_aiquesbank.lang', 0)->whereDate('created_answer', '>', $aMonthAgo)->groupBy('category')->having('countWrong', '>=', '3')->pluck('countWrong', 'category');
+
             if ($quesWrong->isNotEmpty()) {
                 $chkWeakItem = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkWeakItem']])->inRandomOrder()->limit(1);
 
                 $categoryCH = DB::connection('xiwei')->table('cs_qtype')->where('status', 1)->pluck('sName', 'sCode');
-                $quesWrong->each(function ($wrong) use ($categoryCH) {
-                    $wrong->categoryCH = $categoryCH[$wrong->category];
+                $quesWrong->each(function ($value, $key) use ($categoryCH, &$weaknessCategory) {
+                    array_push($weaknessCategory, $categoryCH[$key]);
                 });
             }
         }
@@ -319,34 +324,41 @@ class AiLearnController extends Controller
         foreach ($sortGreeting as $greet) {
             $script = json_decode($greet['script'], true);
             if ($greet['sort'] == '1') {
-                foreach ($script as &$value) {
+                foreach ($script as $key => $value) {
                     switch ($greet['chkCond']) {
                         case 'chkGreet':
+                            $script[$key]['content'] = str_replace('U', $user->Utitle, $script[$key]['content']);
                             break;
                         case 'chkLearnDate':
-                            $value['content'] = str_replace('N', $diffInDay, $value['content']);
+                            $script[$key]['content'] = str_replace('N', $diffInDay, $script[$key]['content']);
                             break;
                         case 'chkWeakItem':
-                            $value['content'] = str_replace('W', '', $value['content']);
+                            $script[$key]['content'] = str_replace('W', " [" . implode("、", $weaknessCategory) . "]", $script[$key]['content']);
                             break;
                     }
                 }
             }
-            dump($script);
+
             $greetingAll[] = [
                 'sort' => $greet['sort'],
                 'script' =>  $script,
             ];
         };
-        dd($greetingAll);
+
         $greetJson = json_encode($greetingAll, JSON_UNESCAPED_UNICODE);
         // 給前端的
-        foreach ($sortGreeting as $greet) {
-            $script = json_decode($greet['script'], true);
-            foreach ($script as $value) {
+        foreach ($greetingAll as $greet) {
+            foreach ($greet['script'] as $value) {
                 $greeting['greet'][] = $value;
             }
-        };
+        }
+
+        // foreach ($sortGreeting as $greet) {
+        //     $script = json_decode($greet['script'], true);
+        //     foreach ($script as $value) {
+        //         $greeting['greet'][] = $value;
+        //     }
+        // };
 
         // 看使用者有沒有可選語言
         $lang = array_keys(json_decode($user->ques_limit, true));
