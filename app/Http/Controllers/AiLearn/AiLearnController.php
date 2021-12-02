@@ -260,7 +260,7 @@ class AiLearnController extends Controller
         $greeting = [];
         $now = date('Y-m-d H:i:s');
 
-        $pay = 1;
+        $pay = false;
         $class = 1;
         $system = 1;
         $user = $request->user();
@@ -301,21 +301,42 @@ class AiLearnController extends Controller
                 });
             }
         }
-        // dd("end");
-        // 在查剩下的
+        // ***天數及題型弱項end***
+
+        // ***判斷有無繳費***
+        $yearMonth = today()->format('Ym');
+        $nonpayment = DB::table('cs_accrec_view_users')->where([['UID', $user->UID], ['pMonth', 'like', "%{$yearMonth}%"]])->first();
+        $chkPay = null;
+        if ($nonpayment) {
+            $pMonth = $nonpayment->pMonth;
+            $pStatus = $nonpayment->pStatus;
+            if (today()->gt(Carbon::parse($pMonth)->addWeek()) && $pStatus == 'N') {
+                $chkPay = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '3']])->inRandomOrder()->limit(1);
+            }
+        }
+        // ***繳費end***
+
+        // ***判斷上課提醒***
+        
+        // ***上課提醒end***
+
+        // sql 查詢
         $greetUnion = CsGreeting::where([['disabled', 0], ['position', 'start']])
             ->where('sort', '2')
-            ->when($pay, function ($query) {
-                return $query->orWhere('sort', '3');
-            })->when($class, function ($query) {
+            // ->when($pay, function ($query) {
+            //     return $query->orWhere('sort', '3')->inRandomOrder();
+            // })
+            ->when($class, function ($query) {
                 return $query->orWhere('sort', '4');
             })->when($system, function ($query) {
                 return $query->orWhere('sort', '5');
             })->union($greet)
             ->when($chkLearnDate, function ($query) use ($chkLearnDate) {
-                $query->union($chkLearnDate);
+                $query->unionAll($chkLearnDate);
             })->when($chkWeakItem, function ($query) use ($chkWeakItem) {
-                $query->union($chkWeakItem);
+                $query->unionAll($chkWeakItem);
+            })->when($chkPay, function ($query) use ($chkPay) {
+                $query->unionAll($chkPay);
             })
             ->get();
 
@@ -323,20 +344,35 @@ class AiLearnController extends Controller
         $greeting['position'] = 'left';
         foreach ($sortGreeting as $greet) {
             $script = json_decode($greet['script'], true);
+
             if ($greet['sort'] == '1') {
+                // 問候語
                 foreach ($script as $key => $value) {
-                    switch ($greet['chkCond']) {
-                        case 'chkGreet':
-                            $script[$key]['content'] = str_replace('U', $user->Utitle, $script[$key]['content']);
-                            break;
-                        case 'chkLearnDate':
-                            $script[$key]['content'] = str_replace('N', $diffInDay, $script[$key]['content']);
-                            break;
-                        case 'chkWeakItem':
-                            $script[$key]['content'] = str_replace('W', " [" . implode("、", $weaknessCategory) . "]", $script[$key]['content']);
-                            break;
+                    if ($script[$key]['type']) {
+                        switch ($greet['chkCond']) {
+                            case 'chkGreet':
+                                $script[$key]['content'] = str_replace('U', $user->Utitle, $script[$key]['content']);
+                                break;
+                            case 'chkLearnDate':
+                                $script[$key]['content'] = str_replace('N', $diffInDay, $script[$key]['content']);
+                                break;
+                            case 'chkWeakItem':
+                                $script[$key]['content'] = str_replace('W', " [" . implode("、", $weaknessCategory) . "]", $script[$key]['content']);
+                                break;
+                        }
                     }
                 }
+            }
+            // 繳款提醒
+            if ($greet['sort'] == '3') {
+                foreach ($script as $key => $value) {
+                    if ($value['type'] == 'word') {
+                        $script[$key]['content'] = str_replace('D', Carbon::parse($pMonth)->format('Y/m'), $script[$key]['content']);
+                    }
+                }
+            }
+
+            if ($greet['sort'] == '4') {
             }
 
             $greetingAll[] = [
