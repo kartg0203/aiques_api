@@ -295,7 +295,7 @@ class AiLearnController extends Controller
             if ($quesWrong->isNotEmpty()) {
                 $chkWeakItem = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkWeakItem']])->inRandomOrder()->limit(1);
 
-                $categoryCH = DB::connection('xiwei')->table('cs_qtype')->where('status', 1)->pluck('sName', 'sCode');
+                $categoryCH = DB::connection(env('DB_DATABASE_2'))->table('cs_qtype')->where('status', 1)->pluck('sName', 'sCode');
                 $quesWrong->each(function ($value, $key) use ($categoryCH, &$weaknessCategory) {
                     array_push($weaknessCategory, $categoryCH[$key]);
                 });
@@ -316,27 +316,72 @@ class AiLearnController extends Controller
         }
         // ***繳費end***
 
-        // ***判斷上課提醒***
-        
+        // ***判斷今天上課提醒***
+        $reservedClassTable = [
+            [
+                'DB' => env('DB_DATABASE'),
+                'table' => 'cs_classdata',
+                'date' => 'sDate',
+                'classType' => 'uType',
+                'UID' => 'stdID'
+            ],
+            [
+                'DB' => env('DB_DATABASE_2'),
+                'table' => 'cs_greservation_gcview',
+                'date' => 'uDate',
+                'classType' => 'gType',
+                'UID' => 'rvID',
+            ],
+            [
+                'DB' => env('DB_DATABASE_2'),
+                'table' => 'cs_greservation_grview',
+                'date' => 'uDate',
+                'classType' => 'gType',
+                'UID' => 'rvID',
+            ]
+        ];
+
+        $todayClass = [];
+        foreach ($reservedClassTable as $item) {
+            $reservedClass = DB::connection($item['DB'])->table($item['table'])->select("{$item['classType']} as classType", 'ID')->where($item['UID'], $user->UID)->whereDate($item['date'], today())->get();
+            if ($reservedClass->isNotEmpty()) {
+
+                $reservedClass->each(function ($class) use (&$todayClass) {
+                    array_push($todayClass, config("constants.CLASSTYPE.{$class->classType}"));
+                });
+            }
+        }
+        $chkClass = null;
+        if (!empty($todayClass)) {
+            $chkClass = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '4']])->inRandomOrder()->limit(1);
+        }
+
         // ***上課提醒end***
 
         // sql 查詢
         $greetUnion = CsGreeting::where([['disabled', 0], ['position', 'start']])
-            ->where('sort', '2')
+            ->where(function ($query) {
+                $query->where('sort', '2')
+                    ->orWhere('sort', '5');
+            })
             // ->when($pay, function ($query) {
             //     return $query->orWhere('sort', '3')->inRandomOrder();
             // })
-            ->when($class, function ($query) {
-                return $query->orWhere('sort', '4');
-            })->when($system, function ($query) {
-                return $query->orWhere('sort', '5');
-            })->union($greet)
+            // ->when($class, function ($query) {
+            //     return $query->orWhere('sort', '4');
+            // })
+            // ->when($system, function ($query) {
+            //     return $query->orWhere('sort', '5');
+            // })
+            ->union($greet)
             ->when($chkLearnDate, function ($query) use ($chkLearnDate) {
                 $query->unionAll($chkLearnDate);
             })->when($chkWeakItem, function ($query) use ($chkWeakItem) {
                 $query->unionAll($chkWeakItem);
             })->when($chkPay, function ($query) use ($chkPay) {
                 $query->unionAll($chkPay);
+            })->when($chkClass, function ($query) use ($chkClass) {
+                $query->unionAll($chkClass);
             })
             ->get();
 
@@ -372,7 +417,13 @@ class AiLearnController extends Controller
                 }
             }
 
+            // 今天上課提醒
             if ($greet['sort'] == '4') {
+                foreach ($script as $key => $value) {
+                    if ($value['type'] == 'word') {
+                        $script[$key]['content'] = str_replace('C', " [" . implode("、", $todayClass) . "]", $script[$key]['content']);
+                    }
+                }
             }
 
             $greetingAll[] = [
