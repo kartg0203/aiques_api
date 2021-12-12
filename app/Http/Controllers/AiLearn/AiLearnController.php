@@ -12,7 +12,6 @@ use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use PhpParser\Node\Stmt\Break_;
 
 class AiLearnController extends Controller
 {
@@ -132,17 +131,6 @@ class AiLearnController extends Controller
                         ];
 
                         // 製作選項
-                        // foreach (json_decode($ques->options, true) as $key => $value) {
-                        //     $learnContent["question_{$index}_{$key}"] = [
-                        //         'position' => 'left',
-                        //         'question' => [
-                        //             "${key}" => [
-                        //                 'type' => 'word',
-                        //                 'content' => "({$key}) {$value}",
-                        //             ]
-                        //         ]
-                        //     ];
-                        // };
                         foreach (json_decode($ques->options, true) as $key => $value) {
                             $learnContent["question_{$index}_0"]['question'][$key] = [
                                 'type' => 'word',
@@ -239,14 +227,24 @@ class AiLearnController extends Controller
                     }
                 }
 
-                return response()->json(['status' => true, 'greeting' => $greeting, 'nextOptions' => $nextOptions, 'learnContent' => $learnContent, 'ending' => $ending, 'options' => $quesOptions, 'type' => $type, 'recordID' =>  $recordID], JSON_UNESCAPED_UNICODE);
+                $data = [
+                    'greeting' => $greeting,
+                    'nextOptions' => $nextOptions,
+                    'learnContent' => $learnContent,
+                    'ending' => $ending,
+                    'options' => $quesOptions,
+                    'type' => $type,
+                    'recordID' => $recordID,
+                ];
+                return $this->jsonSuccessData($data);
+                // return response()->json(['status' => true, 'greeting' => $greeting, 'nextOptions' => $nextOptions, 'learnContent' => $learnContent, 'ending' => $ending, 'options' => $quesOptions, 'type' => $type, 'recordID' =>  $recordID], JSON_UNESCAPED_UNICODE);
             } else {
                 // 今天沒紀錄
-                return response()->json(['greeting' => $greeting, 'nextOptions' => $nextOptions, 'learnContent' => $learnContent, 'ending' => $ending, 'options' => $quesOptions, 'type' => $type, 'recordID' => $recordID]);
+                return $this->jsonSuccessData(['type' => $type], 200, '今天沒紀錄');
             }
         } else {
             // 新使用者
-            return response()->json(['greeting' => $greeting, 'nextOptions' => $nextOptions, 'learnContent' => $learnContent, 'ending' => $ending, 'options' => $quesOptions, 'type' => $type, 'recordID' => $recordID]);
+            return $this->jsonSuccessData(['type' => $type], 200, '新用戶, 無紀錄');
         }
     }
 
@@ -265,8 +263,7 @@ class AiLearnController extends Controller
         $system = 1;
         $user = $request->user();
 
-        // 先查隨機問候語
-        $greet = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '1'], ['chkCond', 'chkGreet']])->inRandomOrder()->limit(1);
+
 
         // 弱項題型及未上線練習擇一，未上線練習優先
         $latestClassDate = $user->csAiQuesRecords()->latest('created_ques')->value('created_ques');
@@ -277,7 +274,7 @@ class AiLearnController extends Controller
             $aWeekAgo = today()->subWeek();
             // $latestClassDate = today()->modify('-30 days');
             if ($latestClassDate->lte($aWeekAgo)) {
-                $chkLearnDate = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkLearnDate']])->inRandomOrder()->limit(1);
+                $chkLearnDate = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '12'], ['chkCond', 'chkLearnDate']])->inRandomOrder()->limit(1);
                 $diffInDay = $latestClassDate->diffInDays(today());
             }
         }
@@ -293,7 +290,7 @@ class AiLearnController extends Controller
                 ->selectRaw("category, COUNT(is_right = false OR null) as countWrong")->where('cs_aiquesbank.lang', 0)->whereDate('created_answer', '>', $aMonthAgo)->groupBy('category')->having('countWrong', '>=', '3')->pluck('countWrong', 'category');
 
             if ($quesWrong->isNotEmpty()) {
-                $chkWeakItem = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', 1], ['chkCond', 'chkWeakItem']])->inRandomOrder()->limit(1);
+                $chkWeakItem = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '14'], ['chkCond', 'chkWeakItem']])->inRandomOrder()->limit(1);
 
                 $categoryCH = DB::connection(env('DB_DATABASE_2'))->table('cs_qtype')->where('status', 1)->pluck('sName', 'sCode');
                 $quesWrong->each(function ($value, $key) use ($categoryCH, &$weaknessCategory) {
@@ -311,7 +308,7 @@ class AiLearnController extends Controller
             $pMonth = $nonpayment->pMonth;
             $pStatus = $nonpayment->pStatus;
             if (today()->gt(Carbon::parse($pMonth)->addWeek()) && $pStatus == 'N') {
-                $chkPay = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '3']])->inRandomOrder()->limit(1);
+                $chkPay = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '30']])->inRandomOrder()->limit(1);
             }
         }
         // ***繳費end***
@@ -353,26 +350,17 @@ class AiLearnController extends Controller
         }
         $chkClass = null;
         if (!empty($todayClass)) {
-            $chkClass = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '4']])->inRandomOrder()->limit(1);
+            $chkClass = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '40']])->inRandomOrder()->limit(1);
         }
-
         // ***上課提醒end***
 
         // sql 查詢
+        $greet = CsGreeting::where([['disabled', 0], ['position', 'start'], ['sort', '10'], ['chkCond', 'chkGreet']])->inRandomOrder()->limit(1);
         $greetUnion = CsGreeting::where([['disabled', 0], ['position', 'start']])
             ->where(function ($query) {
-                $query->where('sort', '2')
-                    ->orWhere('sort', '5');
+                $query->where('sort', '20')
+                    ->orWhere('sort', '50');
             })
-            // ->when($pay, function ($query) {
-            //     return $query->orWhere('sort', '3')->inRandomOrder();
-            // })
-            // ->when($class, function ($query) {
-            //     return $query->orWhere('sort', '4');
-            // })
-            // ->when($system, function ($query) {
-            //     return $query->orWhere('sort', '5');
-            // })
             ->union($greet)
             ->when($chkLearnDate, function ($query) use ($chkLearnDate) {
                 $query->unionAll($chkLearnDate);
@@ -390,41 +378,66 @@ class AiLearnController extends Controller
         foreach ($sortGreeting as $greet) {
             $script = json_decode($greet['script'], true);
 
-            if ($greet['sort'] == '1') {
-                // 問候語
+            if (in_array($greet['sort'], config('constants.GREETSORT'))) {
                 foreach ($script as $key => $value) {
-                    if ($script[$key]['type']) {
+                    if ($script[$key]['type'] == 'word') {
                         switch ($greet['chkCond']) {
                             case 'chkGreet':
-                                $script[$key]['content'] = str_replace('U', $user->Utitle, $script[$key]['content']);
+                                $script[$key]['content'] = str_ireplace('[user]', $user->Utitle, $script[$key]['content']);
                                 break;
                             case 'chkLearnDate':
-                                $script[$key]['content'] = str_replace('N', $diffInDay, $script[$key]['content']);
+                                $script[$key]['content'] = str_ireplace('[days]', $diffInDay, $script[$key]['content']);
                                 break;
                             case 'chkWeakItem':
-                                $script[$key]['content'] = str_replace('W', " [" . implode("、", $weaknessCategory) . "]", $script[$key]['content']);
+                                $script[$key]['content'] = str_ireplace('[weak]', " [" . implode("、", $weaknessCategory) . "]", $script[$key]['content']);
+                                break;
+                            case 'chkPay':
+                                $script[$key]['content'] = str_ireplace('[date]', Carbon::parse($pMonth)->format('Y/m'), $script[$key]['content']);
+                                break;
+                            case 'chkTodayClass':
+                                $script[$key]['content'] = str_ireplace('[class]', " [" . implode("、", $todayClass) . "]", $script[$key]['content']);
                                 break;
                         }
                     }
                 }
             }
+
+            // if ($greet['sort'] == '1') {
+            //     // 問候語
+            //     foreach ($script as $key => $value) {
+            //         if ($script[$key]['type']) {
+            //             switch ($greet['chkCond']) {
+            //                 case 'chkGreet':
+            //                     $script[$key]['content'] = str_replace('U', $user->Utitle, $script[$key]['content']);
+            //                     break;
+            //                 case 'chkLearnDate':
+            //                     $script[$key]['content'] = str_replace('N', $diffInDay, $script[$key]['content']);
+            //                     break;
+            //                 case 'chkWeakItem':
+            //                     $script[$key]['content'] = str_replace('W', " [" . implode("、", $weaknessCategory) . "]", $script[$key]['content']);
+            //                     break;
+            //             }
+            //         }
+            //     }
+            // }
+
             // 繳款提醒
-            if ($greet['sort'] == '3') {
-                foreach ($script as $key => $value) {
-                    if ($value['type'] == 'word') {
-                        $script[$key]['content'] = str_replace('D', Carbon::parse($pMonth)->format('Y/m'), $script[$key]['content']);
-                    }
-                }
-            }
+            // if ($greet['sort'] == '3') {
+            //     foreach ($script as $key => $value) {
+            //         if ($value['type'] == 'word') {
+            //             $script[$key]['content'] = str_replace('D', Carbon::parse($pMonth)->format('Y/m'), $script[$key]['content']);
+            //         }
+            //     }
+            // }
 
             // 今天上課提醒
-            if ($greet['sort'] == '4') {
-                foreach ($script as $key => $value) {
-                    if ($value['type'] == 'word') {
-                        $script[$key]['content'] = str_replace('C', " [" . implode("、", $todayClass) . "]", $script[$key]['content']);
-                    }
-                }
-            }
+            // if ($greet['sort'] == '4') {
+            //     foreach ($script as $key => $value) {
+            //         if ($value['type'] == 'word') {
+            //             $script[$key]['content'] = str_replace('C', " [" . implode("、", $todayClass) . "]", $script[$key]['content']);
+            //         }
+            //     }
+            // }
 
             $greetingAll[] = [
                 'sort' => $greet['sort'],
@@ -439,13 +452,6 @@ class AiLearnController extends Controller
                 $greeting['greet'][] = $value;
             }
         }
-
-        // foreach ($sortGreeting as $greet) {
-        //     $script = json_decode($greet['script'], true);
-        //     foreach ($script as $value) {
-        //         $greeting['greet'][] = $value;
-        //     }
-        // };
 
         // 看使用者有沒有可選語言
         $lang = array_keys(json_decode($user->ques_limit, true));
@@ -478,8 +484,6 @@ class AiLearnController extends Controller
 
         $langOption = json_encode($nextOptions);
 
-        // $greeting['greet'] = $greetingAll;
-        // $greeting['gTime'] = $now;
         $record = CsAiQuesRecord::create([
             'created_ques' => $now,
             'user_id' => $user->ID,
@@ -487,11 +491,8 @@ class AiLearnController extends Controller
             'language_option' => $langOption
         ]);
         $greeting = $this->setTime($greeting, $now);
-        if ($record) {
-            return response()->json(['status' => true, 'greeting' => $greeting, 'nextOptions' => $next], JSON_UNESCAPED_UNICODE);
-        } else {
-            return response()->json(['status' => false, 'error' => ['message' => 'record create error']]);
-        }
+
+        return $this->jsonSuccessData(['greeting' => $greeting, 'nextOptions' => $next]);
     }
 
     /**
@@ -500,7 +501,6 @@ class AiLearnController extends Controller
     public function randQues(Request $request, $type = null, $lang = null)
     {
 
-        $ending = [];
         $question = [];
         $answer = [];
         $user = $request->user();
@@ -509,14 +509,10 @@ class AiLearnController extends Controller
         // true 為停下來， false為跑出題，今天有題目但是未作答的是true
         $status = $user->csAiQuesRecords()->whereDate('created_ques', $today)->whereNull('user_answer')->whereNotNull('Qid')->exists();
         if ($status) {
-            return response()->json([
-                'state' => 'wait',
-                'answer' => $answer,
-                'question' => $question,
-                'ending' => $ending,
-                'options' => [],
-                'recordID' => [],
-            ]);
+            return $this->jsonSuccessData(['state' => 'wait']);
+            // return response()->json([
+            //     'state' => 'wait',
+            // ]);
         }
 
         // 抓今天做得題數
@@ -532,14 +528,15 @@ class AiLearnController extends Controller
         $todayTotal = $user->csAiQuesRecords()->whereDate('created_answer', $today)->count();
         // 題數已全部用完，沒題目可做了
         if (array_sum($qLimitArray) -  $todayTotal == 0) {
-            return response()->json([
-                'state' => 'end',
-                'answer' => $answer,
-                'question' => $question,
-                'ending' => $ending,
-                'options' => [],
-                'recordID' => [],
-            ]);
+            return $this->jsonSuccessData(['state' => 'end']);
+            // return response()->json([
+            //     'state' => 'end',
+            //     'answer' => $answer,
+            //     'question' => $question,
+            //     'ending' => $ending,
+            //     'options' => [],
+            //     'recordID' => [],
+            // ]);
         }
         $result = [];
         // 目前答題狀況
@@ -629,17 +626,15 @@ class AiLearnController extends Controller
         }
 
         $question = $this->setTime($question, $record->created_ques);
-        return response()->json(
+        $data =
             [
                 'state' => $state,
                 'answer' => $answer,
                 'question' => $question,
-                'ending' => $ending,
                 'options' => $ques->options,
                 'recordID' => $record->id,
-            ],
-            JSON_UNESCAPED_UNICODE
-        );
+            ];
+        return $this->jsonSuccessData($data);
     }
 
     // 拿題目
@@ -739,7 +734,8 @@ class AiLearnController extends Controller
         // 紀錄抓剛剛出現的題目
         $record = $user->csAiQuesRecords()->where('id', $recordID)->first();
         if (Str::of($record->user_answer)->isNotEmpty()) {
-            return response()->json(['status' => false, 'error' => ['message' => '此題您以作答']]);
+            return $this->jsonSuccessData(['state' => 'stop', 200, '題您以作答']);
+            // return response()->json(['status' => false, 'error' => ['message' => '此題您以作答']]);
         }
         // 問題
         $ques = CsAiQuesBank::select('translation', 'parsing', 'answer', 'category', 'lang')->where('id', $record->Qid)->first();
@@ -856,18 +852,28 @@ class AiLearnController extends Controller
         if ($nextType == 'end') {
             // 沒題目
             $ending = $this->getEnd($record);
+            dd($ending);
             $ending = $this->setTime($ending, $record->created_answer);
             $state = 'end';
         }
-        return response()->json([
-            'status' => true,
+        $data = [
             'state' => $state,
             'recordID' => $record->id,
             'answer' => $answer,
             'question' => $question,
             'nextOptions' => $next,
             'ending' => $ending,
-        ], JSON_UNESCAPED_UNICODE);
+        ];
+        return $this->jsonSuccessData($data);
+        // return response()->json([
+        //     'status' => true,
+        //     'state' => $state,
+        //     'recordID' => $record->id,
+        //     'answer' => $answer,
+        //     'question' => $question,
+        //     'nextOptions' => $next,
+        //     'ending' => $ending,
+        // ], JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -947,6 +953,7 @@ class AiLearnController extends Controller
     public function setTime($content, $time)
     {
         $key = array_key_last($content);
+        dd($content);
         $lastKey = array_key_last($content[$key]);
         $lastItem = $content[$key][$lastKey];
         $lastItem['time'] = $time;
