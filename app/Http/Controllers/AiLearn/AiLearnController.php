@@ -528,7 +528,7 @@ class AiLearnController extends Controller
         $todayTotal = $user->csAiQuesRecords()->whereDate('created_answer', $today)->count();
         // 題數已全部用完，沒題目可做了
         if (array_sum($qLimitArray) -  $todayTotal == 0) {
-            return $this->jsonSuccessData(['state' => 'end']);
+            return $this->jsonSuccessData(['state' => 'over']);
             // return response()->json([
             //     'state' => 'end',
             //     'answer' => $answer,
@@ -734,7 +734,7 @@ class AiLearnController extends Controller
         // 紀錄抓剛剛出現的題目
         $record = $user->csAiQuesRecords()->where('id', $recordID)->first();
         if (Str::of($record->user_answer)->isNotEmpty()) {
-            return $this->jsonSuccessData(['state' => 'stop', 200, '題您以作答']);
+            return $this->jsonSuccessData(['state' => 'stop', 200, '此題您以作答']);
             // return response()->json(['status' => false, 'error' => ['message' => '此題您以作答']]);
         }
         // 問題
@@ -852,7 +852,6 @@ class AiLearnController extends Controller
         if ($nextType == 'end') {
             // 沒題目
             $ending = $this->getEnd($record);
-            dd($ending);
             $ending = $this->setTime($ending, $record->created_answer);
             $state = 'end';
         }
@@ -912,7 +911,7 @@ class AiLearnController extends Controller
         $class = 0;
         $system = 0;
         // 先查隨機問候語
-        $end = CsGreeting::where([['disabled', 0], ['position', 'end'], ['sort', '1']])->inRandomOrder()->limit(1);
+        $end = CsGreeting::where([['disabled', 0], ['position', 'end'], ['sort', '10']])->inRandomOrder()->limit(1);
         // 在查剩下的
         $endingUnion = CsGreeting::where([['disabled', 0], ['position', 'end']])
             ->where('sort', '2')
@@ -952,8 +951,8 @@ class AiLearnController extends Controller
      */
     public function setTime($content, $time)
     {
+
         $key = array_key_last($content);
-        dd($content);
         $lastKey = array_key_last($content[$key]);
         $lastItem = $content[$key][$lastKey];
         $lastItem['time'] = $time;
