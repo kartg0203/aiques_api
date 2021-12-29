@@ -3,7 +3,6 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
-use Throwable;
 
 use App\Http\Responses\ResponseJson;
 
@@ -22,6 +21,14 @@ use Illuminate\Validation\ValidationException;
 use \Symfony\Component\HttpKernel\Exception\HttpException;
 // 這是用來捕獲 http 請求異常的，例如：url 不存在
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+// 這是找不到model時會出現的異常，例如：findOrFail
+
+use \Illuminate\Session\TokenMismatchException;
+// 這是 捕獲csrf token問題
+
+use Throwable;
+
 class Handler extends ExceptionHandler
 {
 
@@ -29,7 +36,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the exception types that are not reported.
      *
-     * @var string[]
+     * @var array
      */
     protected $dontReport = [
         //
@@ -38,7 +45,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the inputs that are never flashed for validation exceptions.
      *
-     * @var string[]
+     * @var array
      */
     protected $dontFlash = [
         'current_password',
@@ -54,7 +61,6 @@ class Handler extends ExceptionHandler
     public function register()
     {
         $this->reportable(function (Throwable $e) {
-            //
         });
     }
 
@@ -79,20 +85,42 @@ class Handler extends ExceptionHandler
         } else if ($e instanceof AuthorizationException) {
             $code = 403;
             $message = '沒有權限訪問此頁面';
+            if (env('APP_DEBUG')) {
+                $error = ['file' => $e->getFile(), 'message' => $e->getMessage(), 'line' => $e->getLine()];
+            }
         } else if ($e instanceof HttpException) {
             // 找不到網頁
             $code = 404;
             $message = '找不到網頁';
+        } else if ($e instanceof ModelNotFoundException) {
+            // 找不到model
+            $code = 404;
+            $message = '資料不存在';
+            if (env('APP_DEBUG')) {
+                $error = ['file' => $e->getFile(), 'message' => $e->getMessage(), 'line' => $e->getLine()];
+            }
         } else if ($e instanceof ValidationException) {
             // 驗證錯誤
             $code = 422;
             $message = '參數格式錯誤';
             $error = $e->errors();
+            if (env('APP_DEBUG')) {
+                $error = ['file' => $e->getFile(), 'message' => $e->getMessage(), 'line' => $e->getLine()];
+            }
+        } else if ($e instanceof TokenMismatchException) {
+            // csrf token 找不到
+            $code = 419;
+            $message = 'CSRF token mismatch';
+            if (env('APP_DEBUG')) {
+                $error = ['file' => $e->getFile(), 'message' => $e->getMessage(), 'line' => $e->getLine()];
+            }
         } else {
             // 其他異常
             $code = 500;
             $message = '伺服器異常';
-            $error = ['file' => $e->getFile(), 'message' => $e->getMessage(), 'line' => $e->getLine()];
+            if (env('APP_DEBUG')) {
+                $error = ['file' => $e->getFile(), 'message' => $e->getMessage(), 'line' => $e->getLine()];
+            }
         }
 
         return $this->jsonErrorsData($code, $message, $error);
