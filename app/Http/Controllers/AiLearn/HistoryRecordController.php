@@ -49,6 +49,7 @@ class HistoryRecordController extends Controller
             $ques = [];
             $ans = [];
         }
-        return response()->json(['ques' => $ques, 'ans' => $ans], JSON_UNESCAPED_UNICODE);
+        return $this->jsonSuccessData(['ques' => $ques, 'ans' => $ans]);
+        // return response()->json(['ques' => $ques, 'ans' => $ans], JSON_UNESCAPED_UNICODE);
     }
 }

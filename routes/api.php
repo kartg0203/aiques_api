@@ -24,9 +24,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // 對話學習
         Route::get('', [AiLearnController::class, 'todayRecord']);
         Route::get('greeting', [AiLearnController::class, 'getGreet']);
-        Route::get('randques/{type?}/{lang?}', [AiLearnController::class, 'randQues']);
-        Route::post('', [AiLearnController::class, 'answer']);
-        // // 歷史紀錄
+        Route::get('randques', [AiLearnController::class, 'randQues']);
+        Route::post('{id}', [AiLearnController::class, 'answer']);
+        //  歷史紀錄
         Route::get('history', [HistoryRecordController::class, 'historyRecord']);
     });
 });

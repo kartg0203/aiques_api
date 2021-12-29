@@ -12,6 +12,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AiLearnController extends Controller
 {
@@ -498,7 +500,7 @@ class AiLearnController extends Controller
     /**
      * 隨機出題
      */
-    public function randQues(Request $request, $type = null, $lang = null)
+    public function randQues(Request $request)
     {
 
         $question = [];
@@ -506,13 +508,12 @@ class AiLearnController extends Controller
         $user = $request->user();
         $now = date('Y-m-d H:i:s');
         $today = date('Y-m-d');
+        $type = $request->type;
+        $lang = $request->lang;
         // true 為停下來， false為跑出題，今天有題目但是未作答的是true
         $status = $user->csAiQuesRecords()->whereDate('created_ques', $today)->whereNull('user_answer')->whereNotNull('Qid')->exists();
         if ($status) {
             return $this->jsonSuccessData(['state' => 'wait']);
-            // return response()->json([
-            //     'state' => 'wait',
-            // ]);
         }
 
         // 抓今天做得題數
@@ -728,20 +729,37 @@ class AiLearnController extends Controller
         $today = date('Y-m-d');
         $user = $request->user();
         $langOption = null;
-        $recordID = $request->recordID;
+        // $recordID = $request->recordID;
+        $recordID = $request->id;
         $ending = [];
 
+        $validator = Validator::make(
+            $request->all(),
+            [
+                'uAnswer' => ['required', Rule::in(['A', 'B', 'C', 'D'])],
+            ],
+            [
+                'required' => ':attribute不能為空',
+                'in' => ':attribute 選項格式不符',
+            ],
+            [
+                'uAnswer' => '答案',
+            ]
+        );
+        if ($validator->fails()) {
+            return $this->jsonErrorsData(400, '答案輸入錯誤', $validator->errors());
+        }
         // 紀錄抓剛剛出現的題目
-        $record = $user->csAiQuesRecords()->where('id', $recordID)->first();
+        $record = $user->csAiQuesRecords()->where('id', $recordID)->firstOrFail();
         if (Str::of($record->user_answer)->isNotEmpty()) {
-            return $this->jsonSuccessData(['state' => 'stop', 200, '此題您以作答']);
+            return $this->jsonSuccessData(['state' => 'stop'], 200, '此題您以作答');
             // return response()->json(['status' => false, 'error' => ['message' => '此題您以作答']]);
         }
+        $answer = $request->uAnswer;
         // 問題
-        $ques = CsAiQuesBank::select('translation', 'parsing', 'answer', 'category', 'lang')->where('id', $record->Qid)->first();
-        $lang = $ques->lang;
+        $ques = CsAiQuesBank::select('translation', 'parsing', 'answer', 'category', 'lang')->where('id', $record->Qid)->firstOrFail();
         $jpCategory = ['jp1', 'jp2', 'jp3'];
-        if ($ques->answer == $request->uAnswer) {
+        if ($ques->answer == $answer) {
             $is_right = true;
             $correctAnswer = "正確答案是: {$ques->answer}, 恭喜您答對了!!!";
             if ($ques->category != 'VO' && in_array($ques->category, $jpCategory) == false) {
@@ -800,14 +818,14 @@ class AiLearnController extends Controller
             $nextPosition = 'end';
         }
 
-        $record->update(['is_right' => $is_right, 'user_answer' => $request->uAnswer, 'created_answer' => $now, 'language_option' => $langOption]);
+        $record->update(['is_right' => $is_right, 'user_answer' => $answer, 'created_answer' => $now, 'language_option' => $langOption]);
 
         $answer = [
             'position' => 'right',
             'answer' => [
                 'answer' => [
                     'type' => 'word',
-                    'content' => $request->uAnswer,
+                    'content' => $answer,
                 ],
             ],
         ];
